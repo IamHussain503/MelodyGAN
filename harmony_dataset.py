@@ -25,6 +25,8 @@ class HarmonyNetDataset(Dataset):
 
         return emotion_embedding, context, melody
 
+
+
     def _process_midi(self, midi_path):
         """Convert MIDI file into a numeric representation (e.g., pitches, durations)."""
         try:
@@ -38,7 +40,7 @@ class HarmonyNetDataset(Dataset):
             return torch.tensor(melody, dtype=torch.float32)  # Variable-length tensor
         except Exception as e:
             print(f"Error processing MIDI file {midi_path}: {e}")
-            return torch.empty(0, 3)  # Return an empty tensor to be filtered later
+            return None  # Return None for invalid files
 
 
 

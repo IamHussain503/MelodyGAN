@@ -8,11 +8,11 @@ def collate_fn(batch):
     Custom collate function to handle variable-length melodies.
     Pads all melodies in the batch to the same length.
     """
-    # Filter out samples with empty melodies
-    batch = [sample for sample in batch if sample[2].size(0) > 0]
+    # Filter out samples with invalid or empty melodies
+    batch = [sample for sample in batch if sample[2] is not None and sample[2].size(0) > 0]
 
     if len(batch) == 0:
-        raise ValueError("All samples in the batch have empty melodies.")
+        raise ValueError("All samples in the batch have invalid or empty melodies.")
 
     # Unpack batch
     emotion_embeddings, contexts, melodies = zip(*batch)
@@ -25,6 +25,7 @@ def collate_fn(batch):
     melodies_padded = pad_sequence(melodies, batch_first=True, padding_value=0.0)
 
     return emotion_embeddings, contexts, melodies_padded
+
 
 
 
@@ -54,9 +55,9 @@ def train_model(dataloader, model, optimizer, device, projection):
         inputs = torch.cat([emotion_embeddings, contexts], dim=1)  # Shape: [batch_size, 7]
 
         # Forward pass with dynamic sequence length
-        melodies = melodies.to(device)  # Shape: [batch_size, sequence_length, 3]
+        melodies = melodies.to(device)  # Shape: [batch_size, max_sequence_length, 3]
         sequence_length = melodies.size(1)
-        outputs = model(inputs, sequence_length)  # Shape: [batch_size, sequence_length, 3]
+        outputs = model(inputs, sequence_length)  # Shape: [batch_size, max_sequence_length, 3]
 
         # Compute loss
         loss = torch.nn.MSELoss()(outputs, melodies)
@@ -69,6 +70,7 @@ def train_model(dataloader, model, optimizer, device, projection):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
 
 
 
