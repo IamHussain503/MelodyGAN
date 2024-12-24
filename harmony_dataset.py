@@ -3,10 +3,15 @@ from torch.utils.data import Dataset
 import pretty_midi
 import json
 
-class HarmonyNetDataset(Dataset):
-    def __init__(self, json_file):
-        with open(json_file, "r") as f:
-            self.data = json.load(f)
+class HarmonyNetDataset(torch.utils.data.Dataset):
+    def __init__(self, data):
+        """
+        Dataset class for HarmonyNet++.
+        
+        Args:
+            data (list): Pre-split dataset as a list of dictionaries.
+        """
+        self.data = data
 
     def __len__(self):
         return len(self.data)
@@ -15,17 +20,12 @@ class HarmonyNetDataset(Dataset):
         sample = self.data[idx]
 
         # Extract inputs
-        caption = sample["caption"]
         emotion_embedding = torch.tensor(sample["emotion_embedding"], dtype=torch.float32)
         context = torch.tensor(sample["context"], dtype=torch.float32)
-
-        # Convert MIDI file to numeric representation
-        midi_path = sample["melody_path"]
-        melody = self._process_midi(midi_path)
+        melody_path = sample["midi_path"]
+        melody = self._process_midi(melody_path)
 
         return emotion_embedding, context, melody
-
-
 
     def _process_midi(self, midi_path):
         """Convert MIDI file into a numeric representation (e.g., pitches, durations)."""
@@ -40,7 +40,8 @@ class HarmonyNetDataset(Dataset):
             return torch.tensor(melody, dtype=torch.float32)  # Variable-length tensor
         except Exception as e:
             print(f"Error processing MIDI file {midi_path}: {e}")
-            return None  # Return None for invalid files
+            return torch.empty(0, 3)  # Return empty tensor to be filtered later
+
 
 
 

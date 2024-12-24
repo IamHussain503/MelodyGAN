@@ -2,6 +2,9 @@ from harmony_dataset import HarmonyNetDataset
 import torch
 from melody_gan import MelodyGAN
 from torch.nn.utils.rnn import pad_sequence
+import json
+import random
+from torch.utils.data import Subset
 
 def collate_fn(batch):
     """
@@ -138,6 +141,33 @@ def train_model(dataloader, model, optimizer, device, projection):
 
 
 
+def split_dataset(json_file, train_ratio=0.8):
+    """
+    Split the dataset into training and validation subsets.
+    
+    Args:
+        json_file (str): Path to the JSON dataset file.
+        train_ratio (float): Proportion of data to use for training.
+    
+    Returns:
+        tuple: Training and validation datasets as lists.
+    """
+    # Load the dataset
+    with open(json_file, "r") as f:
+        dataset = json.load(f)
+
+    # Shuffle the data
+    random.shuffle(dataset)
+
+    # Compute split index
+    split_idx = int(len(dataset) * train_ratio)
+
+    # Split into training and validation
+    train_data = dataset[:split_idx]
+    val_data = dataset[split_idx:]
+    return train_data, val_data
+
+
 
 
 
@@ -145,18 +175,21 @@ def train_model(dataloader, model, optimizer, device, projection):
 
 
 if __name__ == "__main__":
-    # Dataset and DataLoader
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = HarmonyNetDataset("harmonynet_dataset.json")
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
+
+    # Split dataset
+    train_data, val_data = split_dataset("harmonynet_dataset.json")
+
+    # Initialize Datasets and DataLoaders
+    train_dataset = HarmonyNetDataset(train_data)  # Pass split data directly
+    val_dataset = HarmonyNetDataset(val_data)
+    
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
         batch_size=32,
         shuffle=True,
         collate_fn=collate_fn
     )
-    
-    # Split validation dataset (assuming same JSON file is used)
-    val_dataset = HarmonyNetDataset("harmonynet_validation_dataset.json")
     val_dataloader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=32,
@@ -173,7 +206,7 @@ if __name__ == "__main__":
     num_epochs = 20
     for epoch in range(1, num_epochs + 1):
         # Training
-        train_loss = train_model(dataloader, melody_gan, optimizer, device, projection)
+        train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection)
 
         # Validation
         val_loss = validate_model(val_dataloader, melody_gan, device, projection)
@@ -183,4 +216,5 @@ if __name__ == "__main__":
 
         # Save checkpoint
         save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+
 
