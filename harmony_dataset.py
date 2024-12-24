@@ -37,7 +37,7 @@ class HarmonyNetDataset(torch.utils.data.Dataset):
     def _augment_melody(self, melody):
         """Apply random transposition to melody."""
         if melody.ndim != 2 or melody.size(0) == 0:  # Ensure valid shape
-            print("Skipping augmentation for empty or invalid melody.")
+            # print("Skipping augmentation for empty or invalid melody.")
             return melody
 
         transpose = random.randint(-self.transpose_range, self.transpose_range)
