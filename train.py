@@ -200,7 +200,7 @@ if __name__ == "__main__":
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=128,  # Larger batch size for GPU utilization
+        batch_size=512,  # Larger batch size for GPU utilization
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=4,  # Multi-threaded data loading
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     )
     val_dataloader = DataLoader(
         val_dataset,
-        batch_size=128,
+        batch_size=512,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=4
