@@ -52,9 +52,6 @@ def prepare_harmonynet_dataset():
     # Load Hugging Face dataset
     dataset = load_dataset(HUGGINGFACE_DATASET)
 
-    # Check available fields in the dataset
-    print("Dataset Features:", dataset["train"].features)
-
     # Initialize emotion extractor
     emotion_extractor = EmotionExtractor()
 
@@ -62,14 +59,19 @@ def prepare_harmonynet_dataset():
     harmonynet_data = []
 
     for sample in tqdm(dataset["train"]):  # Replace 'train' with the relevant split if needed
-        # Check and replace the 'text' key with the actual caption field name
-        caption = sample.get("text", None)  # Replace 'text' with the correct field name if different
+        # Use 'Prompts' as the caption field
+        caption = sample.get("Prompts", None)
         if caption is None:
             print(f"Skipping sample due to missing caption: {sample}")
             continue
 
-        audio_path = sample["audio"]["path"]
-        wav_file_name = os.path.basename(audio_path)  # WAV file identifier
+        # Use 'File_Path' for audio details
+        audio_info = sample.get("File_Path", None)
+        if audio_info is None or "path" not in audio_info:
+            print(f"Skipping sample due to missing audio path: {sample}")
+            continue
+
+        wav_file_name = audio_info["path"]  # WAV file identifier
         melody_name = wav_file_name.replace(".wav", ".npy")  # Corresponding melody file
 
         try:
