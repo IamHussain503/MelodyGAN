@@ -4,6 +4,7 @@ import numpy as np
 from datasets import load_dataset
 from transformers import T5Tokenizer, T5EncoderModel
 from tqdm import tqdm
+import torch
 
 # Paths and Parameters
 HUGGINGFACE_DATASET = "AudioSubnet/ttm_validation_dataset_10sec"
