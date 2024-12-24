@@ -29,7 +29,7 @@ class HarmonyNetDataset(torch.utils.data.Dataset):
         # Extract inputs
         emotion_embedding = torch.tensor(sample["emotion_embedding"], dtype=torch.float32)
         context = torch.tensor(sample["context"], dtype=torch.float32)
-        melody_path = sample["midi_path"]
+        melody_path = sample["melody_path"]
         melody = self._process_midi(melody_path)
 
         # Apply augmentation
