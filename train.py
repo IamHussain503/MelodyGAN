@@ -5,7 +5,16 @@ from torch.nn.utils.rnn import pad_sequence
 import json
 import random
 from torch.utils.data import Subset
+import os
+import time
+import torch
+from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
+from harmony_dataset import HarmonyNetDataset
+from melody_gan import MelodyGAN
+from torch.cuda.amp import autocast, GradScaler
 
+# Custom collate function to handle variable-length melodies
 def collate_fn(batch):
     """
     Custom collate function to handle variable-length melodies.
@@ -28,9 +37,6 @@ def collate_fn(batch):
     melodies_padded = pad_sequence(melodies, batch_first=True, padding_value=0.0)
 
     return emotion_embeddings, contexts, melodies_padded
-
-
-import os
 
 def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpoints"):
     """
@@ -57,6 +63,60 @@ def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpo
 
 
 
+# Training loop with optimizations
+def train_model(dataloader, model, optimizer, device, projection, scaler, epoch):
+    """
+    Training loop for HarmonyNet++ with batch-wise loss logging and mixed precision.
+
+    Args:
+        dataloader (DataLoader): Training data loader.
+        model (torch.nn.Module): MelodyGAN model.
+        optimizer (torch.optim.Optimizer): Optimizer for training.
+        device (torch.device): Device to run the training.
+        projection (torch.nn.Linear): Projection layer for emotion embeddings.
+        scaler (torch.cuda.amp.GradScaler): Gradient scaler for mixed precision.
+        epoch (int): Current epoch.
+
+    Returns:
+        float: Average training loss for the epoch.
+    """
+    model.train()
+    total_loss = 0
+
+    for batch_idx, (emotion_embeddings, contexts, melodies) in enumerate(dataloader, start=1):
+        # Move tensors to device
+        emotion_embeddings = emotion_embeddings.to(device)
+        contexts = contexts.to(device)
+        melodies = melodies.to(device)
+
+        # Project emotion embeddings
+        emotion_embeddings = projection(emotion_embeddings)  # Shape: [batch_size, 4]
+
+        # Concatenate emotion embeddings and contexts
+        inputs = torch.cat([emotion_embeddings, contexts], dim=1)  # Shape: [batch_size, 7]
+
+        # Forward pass with mixed precision
+        with autocast():
+            target_length = melodies.size(1)
+            outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
+            loss = torch.nn.MSELoss()(outputs, melodies)
+
+        # Backpropagation
+        optimizer.zero_grad()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        # Accumulate total loss
+        total_loss += loss.item()
+
+        # Log batch loss
+        print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Batch Loss: {loss.item():.4f}")
+
+    # Return average loss for the epoch
+    return total_loss / len(dataloader)
+
+# Validation loop
 def validate_model(dataloader, model, device, projection):
     """
     Validation loop for HarmonyNet++.
@@ -98,65 +158,6 @@ def validate_model(dataloader, model, device, projection):
 
 
 
-def train_model(dataloader, model, optimizer, device, projection, epoch):
-    """
-    Training loop for HarmonyNet++ with batch-wise loss logging.
-
-    Args:
-        dataloader (DataLoader): Training data loader.
-        model (torch.nn.Module): MelodyGAN model.
-        optimizer (torch.optim.Optimizer): Optimizer for training.
-        device (torch.device): Device to run the training.
-        projection (torch.nn.Linear): Projection layer for emotion embeddings.
-        epoch (int): Current epoch.
-
-    Returns:
-        float: Average training loss for the epoch.
-    """
-    model.train()
-    total_loss = 0
-
-    for batch_idx, (emotion_embeddings, contexts, melodies) in enumerate(dataloader, start=1):
-        # Move tensors to device
-        emotion_embeddings = emotion_embeddings.to(device)
-        contexts = contexts.to(device)
-        melodies = melodies.to(device)
-
-        print("emotion_embeddings device is.............",emotion_embeddings.device)  # Should print 'cuda:0'
-        print("contexts device is .....",contexts.device)  # Should print 'cuda:0'
-        print("melodies device is ...................",melodies.device)  # Should print 'cuda:0'
-
-
-        # Project emotion embeddings
-        emotion_embeddings = projection(emotion_embeddings)  # Shape: [batch_size, 4]
-
-        # Concatenate emotion embeddings and contexts
-        inputs = torch.cat([emotion_embeddings, contexts], dim=1)  # Shape: [batch_size, 7]
-
-        # Forward pass with dynamic sequence length
-        target_length = melodies.size(1)
-        outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
-
-        # Compute loss
-        loss = torch.nn.MSELoss()(outputs, melodies)
-
-        # Backpropagation
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        # Accumulate total loss
-        total_loss += loss.item()
-
-        # Log batch loss
-        print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Batch Loss: {loss.item():.4f}")
-
-    # Return average loss for the epoch
-    return total_loss / len(dataloader)
-
-
-
-
 def split_dataset(json_file, train_ratio=0.8):
     """
     Split the dataset into training and validation subsets.
@@ -185,44 +186,46 @@ def split_dataset(json_file, train_ratio=0.8):
 
 
 if __name__ == "__main__":
+    # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     # Split dataset
     train_data, val_data = split_dataset("harmonynet_dataset.json")
 
-    # Initialize Datasets and DataLoaders
-    train_dataset = HarmonyNetDataset(train_data)  # Pass split data directly
+    # Initialize datasets and dataloaders
+    train_dataset = HarmonyNetDataset(train_data)
     val_dataset = HarmonyNetDataset(val_data)
-    
-    train_dataloader = torch.utils.data.DataLoader(
+
+    train_dataloader = DataLoader(
         train_dataset,
-        batch_size=32,
+        batch_size=128,  # Larger batch size for GPU utilization
         shuffle=True,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
+        num_workers=4,  # Multi-threaded data loading
+        prefetch_factor=2
     )
-    val_dataloader = torch.utils.data.DataLoader(
+    val_dataloader = DataLoader(
         val_dataset,
-        batch_size=32,
+        batch_size=128,
         shuffle=False,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
+        num_workers=4
     )
 
-    print(f"Device......................................................: {device}")
-
-    # Model and Optimizer
-# Model and Optimizer
-    melody_gan = MelodyGAN(input_dim=7, hidden_dim=256, output_dim=128).to(device)
-    projection = torch.nn.Linear(768, 4).to(device)  # Reduce emotion_embeddings to 4 dimensions
+    # Initialize model, projection layer, and optimizer
+    melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
+    projection = torch.nn.Linear(768, 4).to(device)
     optimizer = torch.optim.Adam(list(melody_gan.parameters()) + list(projection.parameters()), lr=1e-4)
-    print(next(melody_gan.parameters()).device)  # Should print 'cuda:0'
-    print(next(projection.parameters()).device)  # Should print 'cuda:0'
 
+    # Gradient scaler for mixed precision
+    scaler = GradScaler()
 
-    # Training Loop
+    # Training loop
     num_epochs = 20
     for epoch in range(1, num_epochs + 1):
         # Training
-        train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, epoch)
+        train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
 
         # Validation
         val_loss = validate_model(val_dataloader, melody_gan, device, projection)
