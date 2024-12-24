@@ -14,29 +14,44 @@ from harmony_dataset import HarmonyNetDataset
 from melody_gan import MelodyGAN
 from torch.cuda.amp import autocast, GradScaler
 
-# Custom collate function to handle variable-length melodies
+
 def collate_fn(batch):
     """
     Custom collate function to handle variable-length melodies.
     Pads all melodies in the batch to the same length.
     """
-    # Filter out samples with invalid or empty melodies
     batch = [sample for sample in batch if sample[2] is not None and sample[2].size(0) > 0]
 
     if len(batch) == 0:
         raise ValueError("All samples in the batch have invalid or empty melodies.")
 
-    # Unpack batch
     emotion_embeddings, contexts, melodies = zip(*batch)
 
-    # Convert to tensors
-    emotion_embeddings = torch.stack(emotion_embeddings)  # Shape: [batch_size, embedding_dim]
-    contexts = torch.stack(contexts)  # Shape: [batch_size, context_dim]
-
-    # Pad melodies to the same length
+    emotion_embeddings = torch.stack(emotion_embeddings)
+    contexts = torch.stack(contexts)
     melodies_padded = pad_sequence(melodies, batch_first=True, padding_value=0.0)
 
     return emotion_embeddings, contexts, melodies_padded
+
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0):
+        self.patience = patience
+        self.delta = delta
+        self.best_loss = None
+        self.counter = 0
+        self.stop = False
+
+    def __call__(self, val_loss):
+        if self.best_loss is None:
+            self.best_loss = val_loss
+        elif val_loss > self.best_loss - self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.stop = True
+        else:
+            self.best_loss = val_loss
+            self.counter = 0
+
 
 def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpoints"):
     """
@@ -188,6 +203,11 @@ def split_dataset(json_file, train_ratio=0.8):
 
 from torch.optim.lr_scheduler import StepLR
 
+import torch
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.cuda.amp import GradScaler
+from torch.utils.data import DataLoader
+
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -195,54 +215,49 @@ if __name__ == "__main__":
     # Split dataset
     train_data, val_data = split_dataset("harmonynet_dataset.json")
 
-    # Initialize datasets and dataloaders
     train_dataset = HarmonyNetDataset(train_data)
     val_dataset = HarmonyNetDataset(val_data)
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=256,
+        batch_size=128,
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=4
     )
     val_dataloader = DataLoader(
         val_dataset,
-        batch_size=256,
+        batch_size=128,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=4
     )
 
-    # Initialize model, projection layer, and optimizer
     melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
     projection = torch.nn.Linear(768, 4).to(device)
-    optimizer = torch.optim.Adam(list(melody_gan.parameters()) + list(projection.parameters()), lr=1e-4)
 
-    # Learning rate scheduler
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+    optimizer = torch.optim.Adam(
+        list(melody_gan.parameters()) + list(projection.parameters()),
+        lr=1e-4,
+        weight_decay=1e-5
+    )
 
-    # Gradient scaler for mixed precision
     scaler = GradScaler()
+    scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
+    early_stopping = EarlyStopping(patience=10)
 
-    # Training loop
     num_epochs = 50
     for epoch in range(1, num_epochs + 1):
-        # Training
         train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
-
-        # Validation
         val_loss = validate_model(val_dataloader, melody_gan, device, projection)
 
-        # Print epoch progress
         print(f"Epoch {epoch}/{num_epochs}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
 
-        # Step the scheduler
         scheduler.step()
+        early_stopping(val_loss)
 
-        # Save checkpoint
+        if early_stopping.stop:
+            print("Early stopping triggered!")
+            break
+
         save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
-
-
-
-
