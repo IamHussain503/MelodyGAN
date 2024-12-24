@@ -74,15 +74,18 @@ def validate_model(dataloader, model, device, projection):
     total_loss = 0
     with torch.no_grad():
         for emotion_embeddings, contexts, melodies in dataloader:
+            # Move tensors to device
+            emotion_embeddings = emotion_embeddings.to(device)
+            contexts = contexts.to(device)
+            melodies = melodies.to(device)
+
             # Project emotion embeddings
-            emotion_embeddings = projection(emotion_embeddings.to(device))  # Shape: [batch_size, 4]
+            emotion_embeddings = projection(emotion_embeddings)  # Shape: [batch_size, 4]
 
             # Concatenate emotion embeddings and contexts
-            contexts = contexts.to(device)
             inputs = torch.cat([emotion_embeddings, contexts], dim=1)  # Shape: [batch_size, 7]
 
             # Forward pass with dynamic sequence length
-            melodies = melodies.to(device)  # Shape: [batch_size, target_length, 3]
             target_length = melodies.size(1)
             outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
 
@@ -91,6 +94,7 @@ def validate_model(dataloader, model, device, projection):
             total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
 
 
 
@@ -113,15 +117,23 @@ def train_model(dataloader, model, optimizer, device, projection, epoch):
     total_loss = 0
 
     for batch_idx, (emotion_embeddings, contexts, melodies) in enumerate(dataloader, start=1):
+        # Move tensors to device
+        emotion_embeddings = emotion_embeddings.to(device)
+        contexts = contexts.to(device)
+        melodies = melodies.to(device)
+
+        print("emotion_embeddings device is.............",emotion_embeddings.device)  # Should print 'cuda:0'
+        print("contexts device is .....",contexts.device)  # Should print 'cuda:0'
+        print("melodies device is ...................",melodies.device)  # Should print 'cuda:0'
+
+
         # Project emotion embeddings
-        emotion_embeddings = projection(emotion_embeddings.to(device))  # Shape: [batch_size, 4]
+        emotion_embeddings = projection(emotion_embeddings)  # Shape: [batch_size, 4]
 
         # Concatenate emotion embeddings and contexts
-        contexts = contexts.to(device)
         inputs = torch.cat([emotion_embeddings, contexts], dim=1)  # Shape: [batch_size, 7]
 
         # Forward pass with dynamic sequence length
-        melodies = melodies.to(device)  # Shape: [batch_size, target_length, 3]
         target_length = melodies.size(1)
         outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
 
@@ -198,9 +210,13 @@ if __name__ == "__main__":
     print(f"Device......................................................: {device}")
 
     # Model and Optimizer
+# Model and Optimizer
     melody_gan = MelodyGAN(input_dim=7, hidden_dim=256, output_dim=128).to(device)
     projection = torch.nn.Linear(768, 4).to(device)  # Reduce emotion_embeddings to 4 dimensions
     optimizer = torch.optim.Adam(list(melody_gan.parameters()) + list(projection.parameters()), lr=1e-4)
+    print(next(melody_gan.parameters()).device)  # Should print 'cuda:0'
+    print(next(projection.parameters()).device)  # Should print 'cuda:0'
+
 
     # Training Loop
     num_epochs = 20
