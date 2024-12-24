@@ -125,7 +125,7 @@ def train_model(dataloader, model, optimizer, device, projection):
         outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
 
         # Log shapes for debugging
-        print(f"Outputs shape: {outputs.shape}, Melodies shape: {melodies.shape}")
+        # print(f"Outputs shape: {outputs.shape}, Melodies shape: {melodies.shape}")
 
         # Compute loss
         loss = torch.nn.MSELoss()(outputs, melodies)
