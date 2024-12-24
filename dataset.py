@@ -73,7 +73,7 @@ def prepare_harmonynet_dataset():
             continue
 
         wav_file_name = audio_info["path"]  # WAV file identifier
-        melody_name = wav_file_name.replace(".wav", ".npy")  # Corresponding melody file
+        melody_name = wav_file_name.replace(".wav", ".midi")  # Corresponding melody file
 
         try:
             # Extract emotion embedding
