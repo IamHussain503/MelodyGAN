@@ -6,11 +6,10 @@ from transformers import T5Tokenizer, T5EncoderModel
 
 # Paths and Parameters
 CAPTIONS_FILE = "captions.txt"  # Path to captions file
-MELODIES_DIR = "/root/MelodyGAN/melodies"  # Directory containing melody files in .mid format
+MELODIES_DIR = "./melodies"  # Directory containing melody files
 OUTPUT_JSON = "harmonynet_dataset.json"
-SAMPLE_RATE = 16000  # Target sample rate for audio processing
 
-# Emotion Encoder
+# Emotion Extractor
 class EmotionExtractor:
     def __init__(self, model_name="t5-base"):
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
@@ -29,30 +28,21 @@ class EmotionExtractor:
             embedding = self.encoder(**tokens).last_hidden_state.mean(dim=1).squeeze()
         return embedding.numpy()
 
-# Context Generator (Dummy Example)
-def generate_context():
+# Find Matching Melody Files
+def find_matching_melody_file(index, melodies_dir):
     """
-    Generate random context features (e.g., emotion intensity, environment size, echo level).
-    Returns:
-        list: Random context vector.
-    """
-    return np.random.rand(3).tolist()
-
-# Match Melody Files
-def find_matching_melody_file(index):
-    """
-    Match melody files based on their index.
+    Dynamically match melody files with captions using their index.
     Args:
         index (int): Line index from captions.txt.
+        melodies_dir (str): Directory containing melody files.
     Returns:
         str: Path to the matching melody file.
     """
-    melody_name = f"melody{index + 1}.mid"  # Assuming melody files follow the pattern melody1.mid, melody2.mid, etc.
-    melody_path = os.path.join(MELODIES_DIR, melody_name)
-    if os.path.exists(melody_path):
-        return melody_path
+    melody_files = sorted(os.listdir(melodies_dir))  # Ensure consistent ordering
+    if index < len(melody_files):
+        return os.path.join(melodies_dir, melody_files[index])
     else:
-        raise FileNotFoundError(f"Melody file not found: {melody_path}")
+        raise FileNotFoundError(f"No melody file found for index {index + 1} in {melodies_dir}")
 
 # Dataset Preparation
 def prepare_harmonynet_dataset():
@@ -71,14 +61,14 @@ def prepare_harmonynet_dataset():
 
     for idx, caption in tqdm(enumerate(captions), total=len(captions)):
         try:
-            # Match melody file
-            melody_file = find_matching_melody_file(idx)
+            # Dynamically match melody file
+            melody_file = find_matching_melody_file(idx, MELODIES_DIR)
 
             # Extract emotion embedding
             emotion_embedding = emotion_extractor.extract_emotion(caption)
 
             # Generate random context
-            context = generate_context()
+            context = np.random.rand(3).tolist()
 
             # Append to dataset
             harmonynet_data.append({
