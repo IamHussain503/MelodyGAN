@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 import pretty_midi
+import json
 
 class HarmonyNetDataset(Dataset):
     def __init__(self, json_file):
