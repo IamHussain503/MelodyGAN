@@ -51,15 +51,16 @@ def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpo
         save_dir (str): Directory to save checkpoints.
     """
     os.makedirs(save_dir, exist_ok=True)
-    checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
-    torch.save({
-        "epoch": epoch,
-        "model_state_dict": model.state_dict(),
-        "projection_state_dict": projection.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "loss": loss
-    }, checkpoint_path)
-    print(f"Checkpoint saved: {checkpoint_path}")
+    if epoch % 10 == 0:
+        checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "projection_state_dict": projection.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": loss
+        }, checkpoint_path)
+        print(f"Checkpoint saved: {checkpoint_path}")
 
 
 
@@ -111,7 +112,7 @@ def train_model(dataloader, model, optimizer, device, projection, scaler, epoch)
         total_loss += loss.item()
 
         # Log batch loss
-        print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Batch Loss: {loss.item():.4f}")
+        # print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Batch Loss: {loss.item():.4f}")
 
     # Return average loss for the epoch
     return total_loss / len(dataloader)
@@ -222,7 +223,7 @@ if __name__ == "__main__":
     scaler = GradScaler()
 
     # Training loop
-    num_epochs = 20
+    num_epochs = 200
     for epoch in range(1, num_epochs + 1):
         # Training
         train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
