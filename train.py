@@ -72,6 +72,7 @@ def train_model(dataloader, model, optimizer, device, projection):
 
 if __name__ == "__main__":
     # Dataset and DataLoader
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset = HarmonyNetDataset("harmonynet_dataset.json")
     dataloader = torch.utils.data.DataLoader(
         dataset,
