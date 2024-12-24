@@ -29,6 +29,7 @@ def collate_fn(batch):
 
 
 
+
 def train_model(dataloader, model, optimizer, device, projection):
     """
     Training loop for HarmonyNet++.
@@ -70,6 +71,7 @@ def train_model(dataloader, model, optimizer, device, projection):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
 
 
 

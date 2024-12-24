@@ -19,6 +19,7 @@ class MelodyGAN(torch.nn.Module):
         x = torch.relu(self.fc2(x))
         x = self.fc3(x)
         x = x.view(x.size(0), -1, 3)  # Reshape to [batch_size, fixed_length, 3]
-        return x[:, :sequence_length, :]  # Truncate to match target sequence length
+        return x[:, :sequence_length, :]  # Truncate or adjust to match the target sequence length
+
 
 
