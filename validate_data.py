@@ -6,8 +6,8 @@ def validate_dataset(json_file):
         dataset = json.load(f)
 
     for idx, sample in enumerate(dataset):
-        if not os.path.exists(sample["midi_path"]):
-            print(f"MIDI file missing: {sample['midi_path']} (Index {idx})")
+        if not os.path.exists(sample["melody_path"]):
+            print(f"MIDI file missing: {sample['melody_path']} (Index {idx})")
         if not isinstance(sample["emotion_embedding"], list):
             print(f"Invalid emotion embedding: {sample['emotion_embedding']} (Index {idx})")
         if not isinstance(sample["context"], list):
