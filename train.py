@@ -27,6 +27,67 @@ def collate_fn(batch):
     return emotion_embeddings, contexts, melodies_padded
 
 
+import os
+
+def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpoints"):
+    """
+    Save model and optimizer state as a checkpoint.
+    
+    Args:
+        model (torch.nn.Module): The MelodyGAN model.
+        projection (torch.nn.Module): Projection layer.
+        optimizer (torch.optim.Optimizer): Optimizer state.
+        epoch (int): Current epoch.
+        loss (float): Loss at the current epoch.
+        save_dir (str): Directory to save checkpoints.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
+    torch.save({
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "projection_state_dict": projection.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": loss
+    }, checkpoint_path)
+    print(f"Checkpoint saved: {checkpoint_path}")
+
+
+
+def validate_model(dataloader, model, device, projection):
+    """
+    Validation loop for HarmonyNet++.
+
+    Args:
+        dataloader (DataLoader): Validation data loader.
+        model (torch.nn.Module): MelodyGAN model.
+        device (torch.device): Device to run the validation.
+        projection (torch.nn.Linear): Projection layer for emotion embeddings.
+
+    Returns:
+        float: Average validation loss.
+    """
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for emotion_embeddings, contexts, melodies in dataloader:
+            # Project emotion embeddings
+            emotion_embeddings = projection(emotion_embeddings.to(device))  # Shape: [batch_size, 4]
+
+            # Concatenate emotion embeddings and contexts
+            contexts = contexts.to(device)
+            inputs = torch.cat([emotion_embeddings, contexts], dim=1)  # Shape: [batch_size, 7]
+
+            # Forward pass with dynamic sequence length
+            melodies = melodies.to(device)  # Shape: [batch_size, target_length, 3]
+            target_length = melodies.size(1)
+            outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
+
+            # Compute loss
+            loss = torch.nn.MSELoss()(outputs, melodies)
+            total_loss += loss.item()
+
+    return total_loss / len(dataloader)
 
 
 
@@ -93,6 +154,15 @@ if __name__ == "__main__":
         shuffle=True,
         collate_fn=collate_fn
     )
+    
+    # Split validation dataset (assuming same JSON file is used)
+    val_dataset = HarmonyNetDataset("harmonynet_validation_dataset.json")
+    val_dataloader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=32,
+        shuffle=False,
+        collate_fn=collate_fn
+    )
 
     # Model and Optimizer
     melody_gan = MelodyGAN(input_dim=7, hidden_dim=256, output_dim=128).to(device)
@@ -100,6 +170,17 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(list(melody_gan.parameters()) + list(projection.parameters()), lr=1e-4)
 
     # Training Loop
-    for epoch in range(20):  # Example epochs
-        avg_loss = train_model(dataloader, melody_gan, optimizer, device, projection)
-        print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
+    num_epochs = 20
+    for epoch in range(1, num_epochs + 1):
+        # Training
+        train_loss = train_model(dataloader, melody_gan, optimizer, device, projection)
+
+        # Validation
+        val_loss = validate_model(val_dataloader, melody_gan, device, projection)
+
+        # Print epoch progress
+        print(f"Epoch {epoch}/{num_epochs}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
+
+        # Save checkpoint
+        save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+
