@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from tqdm import tqdm
+import torch   
 from transformers import T5Tokenizer, T5EncoderModel
 
 # Paths and Parameters
