@@ -100,7 +100,7 @@ def train_model(dataloader, model, optimizer, device, projection, scaler, epoch)
         with autocast():
             target_length = melodies.size(1)
             outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
-            loss = torch.nn.MSELoss()(outputs, melodies)
+            loss = torch.nn.SmoothL1Loss()(outputs, melodies)
 
         # Backpropagation
         optimizer.zero_grad()
@@ -151,7 +151,7 @@ def validate_model(dataloader, model, device, projection):
             outputs = model(inputs, target_length)  # Shape: [batch_size, target_length, 3]
 
             # Compute loss
-            loss = torch.nn.MSELoss()(outputs, melodies)
+            loss = torch.nn.SmoothL1Loss()(outputs, melodies)
             total_loss += loss.item()
 
     return total_loss / len(dataloader)
@@ -186,8 +186,9 @@ def split_dataset(json_file, train_ratio=0.8):
     return train_data, val_data
 
 
+from torch.optim.lr_scheduler import StepLR
+
 if __name__ == "__main__":
-    # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -200,15 +201,14 @@ if __name__ == "__main__":
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=512,  # Larger batch size for GPU utilization
+        batch_size=256,
         shuffle=True,
         collate_fn=collate_fn,
-        num_workers=4,  # Multi-threaded data loading
-        prefetch_factor=2
+        num_workers=4
     )
     val_dataloader = DataLoader(
         val_dataset,
-        batch_size=512,
+        batch_size=256,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=4
@@ -219,11 +219,14 @@ if __name__ == "__main__":
     projection = torch.nn.Linear(768, 4).to(device)
     optimizer = torch.optim.Adam(list(melody_gan.parameters()) + list(projection.parameters()), lr=1e-4)
 
+    # Learning rate scheduler
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+
     # Gradient scaler for mixed precision
     scaler = GradScaler()
 
     # Training loop
-    num_epochs = 200
+    num_epochs = 50
     for epoch in range(1, num_epochs + 1):
         # Training
         train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
@@ -234,8 +237,12 @@ if __name__ == "__main__":
         # Print epoch progress
         print(f"Epoch {epoch}/{num_epochs}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
 
+        # Step the scheduler
+        scheduler.step()
+
         # Save checkpoint
         save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+
 
 
 
