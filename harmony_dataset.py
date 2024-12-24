@@ -20,7 +20,7 @@ class HarmonyNetDataset(Dataset):
         context = torch.tensor(sample["context"], dtype=torch.float32)
 
         # Convert MIDI file to numeric representation
-        midi_path = sample["midi_path"]
+        midi_path = sample["melody_path"]
         melody = self._process_midi(midi_path)
 
         return emotion_embedding, context, melody
