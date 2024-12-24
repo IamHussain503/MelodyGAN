@@ -6,7 +6,7 @@ from transformers import T5Tokenizer, T5EncoderModel
 
 # Paths and Parameters
 CAPTIONS_FILE = "captions.txt"  # Path to captions file
-MELODIES_DIR = "./melodies"  # Directory containing melody files in .mid format
+MELODIES_DIR = "melodies"  # Directory containing melody files in .mid format
 OUTPUT_JSON = "harmonynet_dataset.json"
 SAMPLE_RATE = 16000  # Target sample rate for audio processing
 
