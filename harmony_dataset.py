@@ -27,11 +27,18 @@ class HarmonyNetDataset(Dataset):
 
     def _process_midi(self, midi_path):
         """Convert MIDI file into a numeric representation (e.g., pitches, durations)."""
-        midi_data = pretty_midi.PrettyMIDI(midi_path)
-        melody = []
-        for instrument in midi_data.instruments:
-            for note in instrument.notes:
-                melody.append([note.pitch, note.start, note.end - note.start])
-        return torch.tensor(melody, dtype=torch.float32)
+        try:
+            midi_data = pretty_midi.PrettyMIDI(midi_path)
+            melody = []
+            for instrument in midi_data.instruments:
+                for note in instrument.notes:
+                    melody.append([note.pitch, note.start, note.end - note.start])
+            if len(melody) == 0:  # Check if melody is empty
+                raise ValueError(f"No valid notes found in {midi_path}")
+            return torch.tensor(melody, dtype=torch.float32)  # Variable-length tensor
+        except Exception as e:
+            print(f"Error processing MIDI file {midi_path}: {e}")
+            return torch.empty(0, 3)  # Return an empty tensor to be filtered later
+
 
 

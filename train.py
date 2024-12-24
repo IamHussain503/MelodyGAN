@@ -7,13 +7,14 @@ def collate_fn(batch):
     """
     Custom collate function to handle variable-length melodies.
     Pads all melodies in the batch to the same length.
-    
-    Args:
-        batch: List of tuples (emotion_embedding, context, melody).
-    
-    Returns:
-        Tuple of padded emotion_embeddings, contexts, and melodies.
     """
+    # Filter out samples with empty melodies
+    batch = [sample for sample in batch if sample[2].size(0) > 0]
+
+    if len(batch) == 0:
+        raise ValueError("All samples in the batch have empty melodies.")
+
+    # Unpack batch
     emotion_embeddings, contexts, melodies = zip(*batch)
 
     # Convert to tensors
@@ -24,6 +25,7 @@ def collate_fn(batch):
     melodies_padded = pad_sequence(melodies, batch_first=True, padding_value=0.0)
 
     return emotion_embeddings, contexts, melodies_padded
+
 
 
 def train_model(dataloader, model, optimizer, device, projection):
