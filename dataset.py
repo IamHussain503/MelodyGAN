@@ -4,7 +4,6 @@ import numpy as np
 from datasets import load_dataset
 from transformers import T5Tokenizer, T5EncoderModel
 from tqdm import tqdm
-import torch
 
 # Paths and Parameters
 HUGGINGFACE_DATASET = "AudioSubnet/ttm_validation_dataset_10sec"
@@ -53,6 +52,9 @@ def prepare_harmonynet_dataset():
     # Load Hugging Face dataset
     dataset = load_dataset(HUGGINGFACE_DATASET)
 
+    # Check available fields in the dataset
+    print("Dataset Features:", dataset["train"].features)
+
     # Initialize emotion extractor
     emotion_extractor = EmotionExtractor()
 
@@ -60,8 +62,12 @@ def prepare_harmonynet_dataset():
     harmonynet_data = []
 
     for sample in tqdm(dataset["train"]):  # Replace 'train' with the relevant split if needed
-        # Extract details
-        caption = sample["text"]
+        # Check and replace the 'text' key with the actual caption field name
+        caption = sample.get("text", None)  # Replace 'text' with the correct field name if different
+        if caption is None:
+            print(f"Skipping sample due to missing caption: {sample}")
+            continue
+
         audio_path = sample["audio"]["path"]
         wav_file_name = os.path.basename(audio_path)  # WAV file identifier
         melody_name = wav_file_name.replace(".wav", ".npy")  # Corresponding melody file
