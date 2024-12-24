@@ -53,8 +53,8 @@ class HarmonyNetDataset(torch.utils.data.Dataset):
                     start_time = note.start
                     duration = note.end - note.start
                     melody.append([pitch, start_time, duration])
-            if len(melody) == 0:  # Check if melody is empty
-                raise ValueError(f"No valid notes found in {midi_path}")
+            # if len(melody) == 0:  # Check if melody is empty
+            #     raise ValueError(f"No valid notes found in {midi_path}")
             return torch.tensor(melody, dtype=torch.float32)  # Variable-length tensor
         except Exception as e:
             print(f"Error processing MIDI file {midi_path}: {e}")
