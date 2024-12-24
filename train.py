@@ -57,7 +57,7 @@ def train_model(dataloader, model, optimizer, device, projection):
         # Forward pass with dynamic sequence length
         melodies = melodies.to(device)  # Shape: [batch_size, max_sequence_length, 3]
         sequence_length = melodies.size(1)
-        outputs = model(inputs, sequence_length)  # Shape: [batch_size, max_sequence_length, 3]
+        outputs = model(inputs, sequence_length)  # Shape: [batch_size, sequence_length, 3]
 
         # Compute loss
         loss = torch.nn.MSELoss()(outputs, melodies)
@@ -70,6 +70,7 @@ def train_model(dataloader, model, optimizer, device, projection):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
 
 
 
