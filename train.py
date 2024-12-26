@@ -218,35 +218,67 @@ if __name__ == "__main__":
     train_dataset = HarmonyNetDataset(train_data)
     val_dataset = HarmonyNetDataset(val_data)
 
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=128,
-        shuffle=True,
-        collate_fn=collate_fn,
-        num_workers=4
-    )
-    val_dataloader = DataLoader(
-        val_dataset,
-        batch_size=128,
-        shuffle=False,
-        collate_fn=collate_fn,
-        num_workers=4
-    )
+    # train_dataloader = DataLoader(
+    #     train_dataset,
+    #     batch_size=128,
+    #     shuffle=True,
+    #     collate_fn=collate_fn,
+    #     num_workers=4
+    # )
+    # val_dataloader = DataLoader(
+    #     val_dataset,
+    #     batch_size=128,
+    #     shuffle=False,
+    #     collate_fn=collate_fn,
+    #     num_workers=4
+    # )
+
+    for max_length in [50, 100, 150]:  # Gradually increase melody length
+        # Filter training data
+        train_subset_data = [sample for sample in train_data if len(sample["melody"]) <= max_length]
+        train_subset = HarmonyNetDataset(train_subset_data)
+
+        # Filter validation data
+        val_subset_data = [sample for sample in val_data if len(sample["melody"]) <= max_length]
+        val_subset = HarmonyNetDataset(val_subset_data)
+
+        # Initialize DataLoaders
+        train_dataloader = DataLoader(
+            train_subset,
+            batch_size=256,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=4
+        )
+        val_dataloader = DataLoader(
+            val_subset,
+            batch_size=256,
+            shuffle=False,
+            collate_fn=collate_fn,
+            num_workers=4
+        )
 
     melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
     projection = torch.nn.Linear(768, 4).to(device)
 
-    optimizer = torch.optim.Adam(
-        list(melody_gan.parameters()) + list(projection.parameters()),
-        lr=1e-4,
-        weight_decay=1e-5
-    )
+    # optimizer = torch.optim.Adam(
+    #     list(melody_gan.parameters()) + list(projection.parameters()),
+    #     lr=1e-4,
+    #     weight_decay=1e-5
+    # )
+
+    optimizer = torch.optim.AdamW(
+    list(melody_gan.parameters()) + list(projection.parameters()),
+    lr=1e-4,
+    weight_decay=1e-5
+)
+
 
     scaler = GradScaler()
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
     early_stopping = EarlyStopping(patience=10)
 
-    num_epochs = 50
+    num_epochs = 10
     for epoch in range(1, num_epochs + 1):
         train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
         val_loss = validate_model(val_dataloader, melody_gan, device, projection)
