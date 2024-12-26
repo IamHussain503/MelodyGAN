@@ -120,7 +120,7 @@ if __name__ == "__main__":
     load_checkpoint(checkpoint_path, melody_gan, projection, optimizer)
 
     # Example input for inference
-    text_caption = "A calm and soothing piano melody."
+    text_caption = "A beautiful music piece with a happy and uplifting rock beat."
     context = [0.8, 0.6, 0.4]  # Example context vector
 
     # Generate melody and save as MIDI
