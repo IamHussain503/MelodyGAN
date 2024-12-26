@@ -13,6 +13,7 @@ from torch.nn.utils.rnn import pad_sequence
 from harmony_dataset import HarmonyNetDataset
 from melody_gan import MelodyGAN
 from torch.cuda.amp import autocast, GradScaler
+import pretty_midi
 
 
 def collate_fn(batch):
