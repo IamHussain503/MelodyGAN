@@ -51,7 +51,7 @@ class HarmonyNetDataset(Dataset):
                     melody.append([pitch, start_time, duration])
 
             if len(melody) == 0:
-                print(f"No valid notes found in {midi_path}. Returning empty tensor.")
+                # print(f"No valid notes found in {midi_path}. Returning empty tensor.")
                 return torch.zeros((0, 3), dtype=torch.float32)  # Return empty tensor if no valid notes
 
             return torch.tensor(melody, dtype=torch.float32)
