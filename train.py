@@ -215,31 +215,30 @@ if __name__ == "__main__":
     # Split dataset
     train_data, val_data = split_dataset("harmonynet_dataset.json")
 
-    train_dataset = HarmonyNetDataset(train_data)
-    val_dataset = HarmonyNetDataset(val_data)
-
-    # train_dataloader = DataLoader(
-    #     train_dataset,
-    #     batch_size=128,
-    #     shuffle=True,
-    #     collate_fn=collate_fn,
-    #     num_workers=4
-    # )
-    # val_dataloader = DataLoader(
-    #     val_dataset,
-    #     batch_size=128,
-    #     shuffle=False,
-    #     collate_fn=collate_fn,
-    #     num_workers=4
-    # )
+    melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
+    projection = torch.nn.Linear(768, 4).to(device)
+    optimizer = torch.optim.AdamW(
+        list(melody_gan.parameters()) + list(projection.parameters()),
+        lr=1e-4,
+        weight_decay=1e-5
+    )
+    scaler = GradScaler()
+    scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
+    early_stopping = EarlyStopping(patience=10)
 
     for max_length in [50, 100, 150]:  # Gradually increase melody length
         # Filter training data
-        train_subset_data = [sample for sample in train_data if len(sample["melody"]) <= max_length]
+        train_subset_data = [
+            sample for sample in train_data
+            if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
+        ]
         train_subset = HarmonyNetDataset(train_subset_data)
 
         # Filter validation data
-        val_subset_data = [sample for sample in val_data if len(sample["melody"]) <= max_length]
+        val_subset_data = [
+            sample for sample in val_data
+            if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
+        ]
         val_subset = HarmonyNetDataset(val_subset_data)
 
         # Initialize DataLoaders
@@ -258,38 +257,18 @@ if __name__ == "__main__":
             num_workers=4
         )
 
-    melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
-    projection = torch.nn.Linear(768, 4).to(device)
+        # Train and validate for each curriculum step
+        for epoch in range(1, 10):  # Shorter training for each step
+            train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
+            val_loss = validate_model(val_dataloader, melody_gan, device, projection)
 
-    # optimizer = torch.optim.Adam(
-    #     list(melody_gan.parameters()) + list(projection.parameters()),
-    #     lr=1e-4,
-    #     weight_decay=1e-5
-    # )
+            print(f"Max Length {max_length}, Epoch {epoch}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
 
-    optimizer = torch.optim.AdamW(
-    list(melody_gan.parameters()) + list(projection.parameters()),
-    lr=1e-4,
-    weight_decay=1e-5
-)
+            scheduler.step()
+            early_stopping(val_loss)
 
+            if early_stopping.stop:
+                print("Early stopping triggered!")
+                break
 
-    scaler = GradScaler()
-    scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
-    early_stopping = EarlyStopping(patience=10)
-
-    num_epochs = 10
-    for epoch in range(1, num_epochs + 1):
-        train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
-        val_loss = validate_model(val_dataloader, melody_gan, device, projection)
-
-        print(f"Epoch {epoch}/{num_epochs}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
-
-        scheduler.step()
-        early_stopping(val_loss)
-
-        if early_stopping.stop:
-            print("Early stopping triggered!")
-            break
-
-        save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+            save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
