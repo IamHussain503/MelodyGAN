@@ -171,6 +171,27 @@ def validate_model(dataloader, model, device, projection):
 
     return total_loss / len(dataloader)
 
+def process_melody_file(melody_path):
+    """
+    Process a MIDI file into a list of normalized notes.
+    Args:
+        melody_path (str): Path to the melody file.
+    Returns:
+        list: Melody data as a list of [pitch, start_time, duration].
+    """
+    try:
+        midi_data = pretty_midi.PrettyMIDI(melody_path)
+        melody = []
+        for instrument in midi_data.instruments:
+            for note in instrument.notes:
+                pitch = note.pitch / 127.0  # Normalize pitch to [0, 1]
+                start_time = note.start
+                duration = note.end - note.start
+                melody.append([pitch, start_time, duration])
+        return melody
+    except Exception as e:
+        print(f"Error processing melody file {melody_path}: {e}")
+        return []
 
 
 
@@ -226,49 +247,50 @@ if __name__ == "__main__":
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
     early_stopping = EarlyStopping(patience=10)
 
-    for max_length in [50, 100, 150]:  # Gradually increase melody length
-        # Filter training data
-        train_subset_data = [
-            sample for sample in train_data
-            if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
-        ]
-        train_subset = HarmonyNetDataset(train_subset_data)
+for max_length in [50, 100, 150]:  # Gradually increase melody length
+    # Filter training data
+    train_subset_data = [
+        sample for sample in train_data
+        if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
+    ]
+    train_subset = HarmonyNetDataset(train_subset_data)
 
-        # Filter validation data
-        val_subset_data = [
-            sample for sample in val_data
-            if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
-        ]
-        val_subset = HarmonyNetDataset(val_subset_data)
+    # Filter validation data
+    val_subset_data = [
+        sample for sample in val_data
+        if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
+    ]
+    val_subset = HarmonyNetDataset(val_subset_data)
 
-        # Initialize DataLoaders
-        train_dataloader = DataLoader(
-            train_subset,
-            batch_size=256,
-            shuffle=True,
-            collate_fn=collate_fn,
-            num_workers=4
-        )
-        val_dataloader = DataLoader(
-            val_subset,
-            batch_size=256,
-            shuffle=False,
-            collate_fn=collate_fn,
-            num_workers=4
-        )
+    # Initialize DataLoaders
+    train_dataloader = DataLoader(
+        train_subset,
+        batch_size=256,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=4
+    )
+    val_dataloader = DataLoader(
+        val_subset,
+        batch_size=256,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=4
+    )
 
-        # Train and validate for each curriculum step
-        for epoch in range(1, 10):  # Shorter training for each step
-            train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
-            val_loss = validate_model(val_dataloader, melody_gan, device, projection)
+    # Train and validate for each curriculum step
+    for epoch in range(1, 10):  # Shorter training for each step
+        train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
+        val_loss = validate_model(val_dataloader, melody_gan, device, projection)
 
-            print(f"Max Length {max_length}, Epoch {epoch}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
+        print(f"Max Length {max_length}, Epoch {epoch}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
 
-            scheduler.step()
-            early_stopping(val_loss)
+        scheduler.step()
+        early_stopping(val_loss)
 
-            if early_stopping.stop:
-                print("Early stopping triggered!")
-                break
+        if early_stopping.stop:
+            print("Early stopping triggered!")
+            break
 
-            save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+        save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+
