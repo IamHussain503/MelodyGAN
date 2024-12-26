@@ -51,7 +51,7 @@ def generate_midi(model, projection, text_caption, context, output_midi_file="ge
     # Generate melody
     model.eval()
     with torch.no_grad():
-        target_length = 50  # Example length for generated melody
+        target_length = 200  # Example length for generated melody
         outputs = model(inputs, target_length)  # Shape: [1, target_length, 3]
 
     # Convert output to MIDI
