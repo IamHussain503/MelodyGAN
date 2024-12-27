@@ -122,7 +122,7 @@ if __name__ == "__main__":
     )
 
     # Load checkpoint
-    checkpoint_path = "checkpoints/checkpoint_epoch_50.pt"
+    checkpoint_path = "checkpoints/checkpoint_epoch_16.pt"
     load_checkpoint(checkpoint_path, melody_generator, projection, optimizer)
 
     # Example input for inference
