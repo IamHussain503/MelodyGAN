@@ -75,17 +75,25 @@ def melody_to_midi(melody, output_midi_file):
 
     start_time = 0
     for note_info in melody:
-        pitch = int(note_info[0] * 127)  # Denormalize pitch
-        start_time += note_info[1]  # Increment start time
-        duration = note_info[2]  # Duration
+        # Clamp pitch to MIDI range [0, 127]
+        pitch = max(0, min(int(note_info[0] * 127), 127))  # Denormalize and clamp pitch
+        start_time += max(note_info[1], 0.0)  # Ensure non-negative start time increment
+        duration = max(note_info[2], 0.1)  # Ensure minimum duration
         end_time = start_time + duration
 
         # Create MIDI note
-        note = pretty_midi.Note(velocity=100, pitch=pitch, start=start_time, end=end_time)
+        note = pretty_midi.Note(
+            velocity=100,  # Fixed velocity
+            pitch=pitch,
+            start=start_time,
+            end=end_time
+        )
         instrument.notes.append(note)
 
     midi.instruments.append(instrument)
     midi.write(output_midi_file)
+    print(f"MIDI file saved to: {output_midi_file}")
+
 
 # Convert MIDI to WAV
 def midi_to_wav(midi_file, wav_file):
