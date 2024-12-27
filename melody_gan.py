@@ -17,11 +17,10 @@ class TransformerMelodyGenerator(nn.Module):
         """
         super(TransformerMelodyGenerator, self).__init__()
         self.embedding = nn.Linear(input_dim, hidden_dim)  # Input embedding
-        self.positional_encoding = nn.Parameter(torch.zeros(1, 512, hidden_dim))  # Supports up to 512 tokens
+        self.positional_encoding = nn.Parameter(torch.zeros(1, 512, hidden_dim))  # Positional encoding
         encoder_layer = TransformerEncoderLayer(hidden_dim, num_heads, dim_feedforward=hidden_dim * 4, dropout=0.3)
         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
-        self.fc = nn.Linear(hidden_dim, output_dim * 3)  # Final linear layer
-
+        self.fc = nn.Linear(hidden_dim, 3)  # Final linear layer maps to [pitch, start_time, duration]
 
     def forward(self, x, target_length):
         """
@@ -43,7 +42,5 @@ class TransformerMelodyGenerator(nn.Module):
         # Embed input and add positional encoding
         x = self.embedding(x) + self.positional_encoding[:, :sequence_length, :]  # Shape: [batch_size, sequence_length, hidden_dim]
         x = self.transformer_encoder(x)
-        x = self.fc(x)  # Shape: [batch_size, sequence_length, output_dim * 3]
-        print(f"Input shape before embedding: {x.shape}")  # Shape: [batch_size, sequence_length, input_dim]
-        print(f"Positional encoding shape: {self.positional_encoding[:, :x.size(1), :].shape}")  # Match sequence length
+        x = self.fc(x)  # Shape: [batch_size, sequence_length, 3]
         return x
