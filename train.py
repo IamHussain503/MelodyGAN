@@ -11,7 +11,6 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from harmony_dataset import HarmonyNetDataset
-from melody_gan import MelodyGAN
 from torch.cuda.amp import autocast, GradScaler
 import pretty_midi
 
