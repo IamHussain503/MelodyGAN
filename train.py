@@ -1,6 +1,6 @@
 from harmony_dataset import HarmonyNetDataset
 import torch
-from melody_gan import MelodyGAN
+from melody_gan import TransformerMelodyGenerator
 from torch.nn.utils.rnn import pad_sequence
 import json
 import random
@@ -57,14 +57,6 @@ class EarlyStopping:
 def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpoints"):
     """
     Save model and optimizer state as a checkpoint.
-    
-    Args:
-        model (torch.nn.Module): The MelodyGAN model.
-        projection (torch.nn.Module): Projection layer.
-        optimizer (torch.optim.Optimizer): Optimizer state.
-        epoch (int): Current epoch.
-        loss (float): Loss at the current epoch.
-        save_dir (str): Directory to save checkpoints.
     """
     os.makedirs(save_dir, exist_ok=True)
     if epoch % 10 == 0:
@@ -77,6 +69,18 @@ def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpo
             "loss": loss
         }, checkpoint_path)
         print(f"Checkpoint saved: {checkpoint_path}")
+
+
+def load_checkpoint(checkpoint_path, model, projection, optimizer):
+    """
+    Load model and optimizer state from a checkpoint.
+    """
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    projection.load_state_dict(checkpoint["projection_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    print(f"Checkpoint loaded from: {checkpoint_path}")
+
 
 
 
@@ -237,10 +241,17 @@ if __name__ == "__main__":
     # Split dataset
     train_data, val_data = split_dataset("harmonynet_dataset.json")
 
-    melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
+    # Initialize Transformer model
+    melody_generator = TransformerMelodyGenerator(
+        input_dim=7,
+        hidden_dim=512,
+        num_heads=8,
+        num_layers=4,
+        output_dim=128
+    ).to(device)
     projection = torch.nn.Linear(768, 4).to(device)
     optimizer = torch.optim.AdamW(
-        list(melody_gan.parameters()) + list(projection.parameters()),
+        list(melody_generator.parameters()) + list(projection.parameters()),
         lr=1e-4,
         weight_decay=1e-5
     )
@@ -281,8 +292,8 @@ for max_length in [50, 100, 150]:  # Gradually increase melody length
 
     # Train and validate for each curriculum step
     for epoch in range(1, 10):  # Shorter training for each step
-        train_loss = train_model(train_dataloader, melody_gan, optimizer, device, projection, scaler, epoch)
-        val_loss = validate_model(val_dataloader, melody_gan, device, projection)
+        train_loss = train_model(train_dataloader, melody_generator, optimizer, device, projection, scaler, epoch)
+        val_loss = validate_model(val_dataloader, melody_generator, device, projection)
 
         print(f"Max Length {max_length}, Epoch {epoch}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
 
@@ -293,5 +304,5 @@ for max_length in [50, 100, 150]:  # Gradually increase melody length
             print("Early stopping triggered!")
             break
 
-        save_checkpoint(melody_gan, projection, optimizer, epoch, train_loss)
+        save_checkpoint(melody_generator, projection, optimizer, epoch, train_loss)
 
