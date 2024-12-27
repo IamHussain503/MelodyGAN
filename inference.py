@@ -1,7 +1,7 @@
 import torch
 import os
 import pretty_midi
-from melody_gan import TransformerMelodyGenerator as MelodyGAN
+from melody_gan import TransformerMelodyGenerator
 from transformers import T5Tokenizer, T5EncoderModel
 
 # Load the checkpoint
@@ -13,22 +13,21 @@ def load_checkpoint(checkpoint_path, model, projection, optimizer):
     print(f"Checkpoint loaded from: {checkpoint_path}")
 
 # Generate a melody in MIDI format
-def generate_midi(model, projection, text_caption, context, output_midi_file="generated_melody.mid", device="cuda"):
+def generate_midi(model, projection, text_caption, output_midi_file="generated_melody.mid", device="cuda"):
     """
-    Generate a melody from text caption and context.
+    Generate a melody from text caption with auto-generated context.
 
     Args:
-        model (torch.nn.Module): MelodyGAN model.
+        model (torch.nn.Module): TransformerMelodyGenerator model.
         projection (torch.nn.Linear): Projection layer for emotion embeddings.
-        text_caption (str): Text input for emotion extraction.
-        context (list): Context vector.
+        text_caption (str): Text input for emotion and context extraction.
         output_midi_file (str): Path to save the generated MIDI file.
         device (str): Device to run the model on.
 
     Returns:
         None
     """
-    # Load T5 for emotion extraction
+    # Load T5 for emotion and context extraction
     tokenizer = T5Tokenizer.from_pretrained("t5-base")
     encoder = T5EncoderModel.from_pretrained("t5-base").to(device)
     encoder.eval()
@@ -36,14 +35,15 @@ def generate_midi(model, projection, text_caption, context, output_midi_file="ge
     # Extract emotion embedding
     tokens = tokenizer(text_caption, return_tensors="pt", truncation=True, padding=True, max_length=128).to(device)
     with torch.no_grad():
-        emotion_embedding = encoder(**tokens).last_hidden_state.mean(dim=1)  # Shape: [1, 768]
+        embedding = encoder(**tokens).last_hidden_state.mean(dim=1)  # Shape: [1, 768]
 
     # Project emotion embedding
     with torch.no_grad():
-        emotion_embedding_projected = projection(emotion_embedding)  # Shape: [1, 4]
+        emotion_embedding_projected = projection(embedding)  # Shape: [1, 4]
 
-    # Prepare context tensor
-    context_tensor = torch.tensor(context, dtype=torch.float32).unsqueeze(0).to(device)  # Shape: [1, 3]
+    # Auto-generate context from T5 embedding
+    context_tensor = embedding[:, :3]  # Use first 3 dimensions of the embedding for context
+    context_tensor = torch.sigmoid(context_tensor)  # Normalize values to [0, 1]
 
     # Concatenate inputs
     inputs = torch.cat([emotion_embedding_projected, context_tensor], dim=1)  # Shape: [1, 7]
@@ -106,26 +106,31 @@ def midi_to_wav(midi_file, wav_file):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Initialize model and projection layer
-    melody_gan = MelodyGAN(input_dim=7, hidden_dim=512, output_dim=128).to(device)
+    # Initialize Transformer model
+    melody_generator = TransformerMelodyGenerator(
+        input_dim=7,
+        hidden_dim=512,
+        num_heads=8,
+        num_layers=4,
+        output_dim=128
+    ).to(device)
     projection = torch.nn.Linear(768, 4).to(device)
     optimizer = torch.optim.AdamW(
-        list(melody_gan.parameters()) + list(projection.parameters()),
+        list(melody_generator.parameters()) + list(projection.parameters()),
         lr=1e-4,
         weight_decay=1e-5
     )
 
     # Load checkpoint
-    checkpoint_path = "checkpoints/checkpoint_epoch_16.pt"
-    load_checkpoint(checkpoint_path, melody_gan, projection, optimizer)
+    checkpoint_path = "checkpoints/checkpoint_epoch_50.pt"
+    load_checkpoint(checkpoint_path, melody_generator, projection, optimizer)
 
     # Example input for inference
     text_caption = "A beautiful music piece with a happy and uplifting rock beat."
-    context = [0.8, 0.6, 0.4]  # Example context vector
 
     # Generate melody and save as MIDI
     output_midi_file = "generated_melody.mid"
-    generate_midi(melody_gan, projection, text_caption, context, output_midi_file, device)
+    generate_midi(melody_generator, projection, text_caption, output_midi_file, device)
 
     # Convert MIDI to WAV
     midi_to_wav(output_midi_file, "generated_melody.wav")
