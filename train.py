@@ -1,6 +1,6 @@
 from harmony_dataset import HarmonyNetDataset
 import torch
-from transformer_melody_generator import TransformerMelodyGenerator
+from melody_gan import TransformerMelodyGenerator
 from torch.nn.utils.rnn import pad_sequence
 import json
 import random
