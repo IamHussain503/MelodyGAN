@@ -1,19 +1,13 @@
 from harmony_dataset import HarmonyNetDataset
 import torch
-from melody_gan import TransformerMelodyGenerator
+from transformer_melody_generator import TransformerMelodyGenerator
 from torch.nn.utils.rnn import pad_sequence
 import json
 import random
-from torch.utils.data import Subset
 import os
-import time
-import torch
 from torch.utils.data import DataLoader
-from torch.nn.utils.rnn import pad_sequence
-from harmony_dataset import HarmonyNetDataset
 from torch.cuda.amp import autocast, GradScaler
-import pretty_midi
-
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 def collate_fn(batch):
     """
@@ -32,6 +26,7 @@ def collate_fn(batch):
     melodies_padded = pad_sequence(melodies, batch_first=True, padding_value=0.0)
 
     return emotion_embeddings, contexts, melodies_padded
+
 
 class EarlyStopping:
     def __init__(self, patience=5, delta=0):
@@ -58,16 +53,15 @@ def save_checkpoint(model, projection, optimizer, epoch, loss, save_dir="checkpo
     Save model and optimizer state as a checkpoint.
     """
     os.makedirs(save_dir, exist_ok=True)
-    if epoch % 10 == 0:
-        checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
-        torch.save({
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "projection_state_dict": projection.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss
-        }, checkpoint_path)
-        print(f"Checkpoint saved: {checkpoint_path}")
+    checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
+    torch.save({
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "projection_state_dict": projection.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": loss
+    }, checkpoint_path)
+    print(f"Checkpoint saved: {checkpoint_path}")
 
 
 def load_checkpoint(checkpoint_path, model, projection, optimizer):
@@ -81,16 +75,13 @@ def load_checkpoint(checkpoint_path, model, projection, optimizer):
     print(f"Checkpoint loaded from: {checkpoint_path}")
 
 
-
-
-# Training loop with optimizations
 def train_model(dataloader, model, optimizer, device, projection, scaler, epoch):
     """
-    Training loop for HarmonyNet++ with batch-wise loss logging and mixed precision.
+    Training loop for Transformer Melody Generator with mixed precision.
 
     Args:
         dataloader (DataLoader): Training data loader.
-        model (torch.nn.Module): MelodyGAN model.
+        model (torch.nn.Module): Transformer-based melody generator model.
         optimizer (torch.optim.Optimizer): Optimizer for training.
         device (torch.device): Device to run the training.
         projection (torch.nn.Linear): Projection layer for emotion embeddings.
@@ -130,20 +121,17 @@ def train_model(dataloader, model, optimizer, device, projection, scaler, epoch)
         # Accumulate total loss
         total_loss += loss.item()
 
-        # Log batch loss
-        # print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Batch Loss: {loss.item():.4f}")
-
     # Return average loss for the epoch
     return total_loss / len(dataloader)
 
-# Validation loop
+
 def validate_model(dataloader, model, device, projection):
     """
-    Validation loop for HarmonyNet++.
+    Validation loop for Transformer Melody Generator.
 
     Args:
         dataloader (DataLoader): Validation data loader.
-        model (torch.nn.Module): MelodyGAN model.
+        model (torch.nn.Module): Transformer-based melody generator model.
         device (torch.device): Device to run the validation.
         projection (torch.nn.Linear): Projection layer for emotion embeddings.
 
@@ -175,38 +163,15 @@ def validate_model(dataloader, model, device, projection):
 
     return total_loss / len(dataloader)
 
-def process_melody_file(melody_path):
-    """
-    Process a MIDI file into a list of normalized notes.
-    Args:
-        melody_path (str): Path to the melody file.
-    Returns:
-        list: Melody data as a list of [pitch, start_time, duration].
-    """
-    try:
-        midi_data = pretty_midi.PrettyMIDI(melody_path)
-        melody = []
-        for instrument in midi_data.instruments:
-            for note in instrument.notes:
-                pitch = note.pitch / 127.0  # Normalize pitch to [0, 1]
-                start_time = note.start
-                duration = note.end - note.start
-                melody.append([pitch, start_time, duration])
-        return melody
-    except Exception as e:
-        print(f"Error processing melody file {melody_path}: {e}")
-        return []
-
-
 
 def split_dataset(json_file, train_ratio=0.8):
     """
     Split the dataset into training and validation subsets.
-    
+
     Args:
         json_file (str): Path to the JSON dataset file.
         train_ratio (float): Proportion of data to use for training.
-    
+
     Returns:
         tuple: Training and validation datasets as lists.
     """
@@ -225,13 +190,6 @@ def split_dataset(json_file, train_ratio=0.8):
     val_data = dataset[split_idx:]
     return train_data, val_data
 
-
-from torch.optim.lr_scheduler import StepLR
-
-import torch
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.cuda.amp import GradScaler
-from torch.utils.data import DataLoader
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -258,43 +216,32 @@ if __name__ == "__main__":
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
     early_stopping = EarlyStopping(patience=10)
 
-for max_length in [50, 100, 150]:  # Gradually increase melody length
-    # Filter training data
-    train_subset_data = [
-        sample for sample in train_data
-        if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
-    ]
-    train_subset = HarmonyNetDataset(train_subset_data)
-
-    # Filter validation data
-    val_subset_data = [
-        sample for sample in val_data
-        if "melody_path" in sample and len(process_melody_file(sample["melody_path"])) <= max_length
-    ]
-    val_subset = HarmonyNetDataset(val_subset_data)
-
     # Initialize DataLoaders
+    train_dataset = HarmonyNetDataset(train_data)
+    val_dataset = HarmonyNetDataset(val_data)
+
     train_dataloader = DataLoader(
-        train_subset,
+        train_dataset,
         batch_size=256,
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=4
     )
     val_dataloader = DataLoader(
-        val_subset,
+        val_dataset,
         batch_size=256,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=4
     )
 
-    # Train and validate for each curriculum step
-    for epoch in range(1, 10):  # Shorter training for each step
+    # Train and validate for a fixed number of epochs
+    num_epochs = 30
+    for epoch in range(1, num_epochs + 1):
         train_loss = train_model(train_dataloader, melody_generator, optimizer, device, projection, scaler, epoch)
         val_loss = validate_model(val_dataloader, melody_generator, device, projection)
 
-        print(f"Max Length {max_length}, Epoch {epoch}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
+        print(f"Epoch {epoch}/{num_epochs}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
 
         scheduler.step()
         early_stopping(val_loss)
@@ -304,4 +251,3 @@ for max_length in [50, 100, 150]:  # Gradually increase melody length
             break
 
         save_checkpoint(melody_generator, projection, optimizer, epoch, train_loss)
-
