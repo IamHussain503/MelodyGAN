@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
+import torch
 
 class TransformerMelodyGenerator(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_heads, num_layers, output_dim):
